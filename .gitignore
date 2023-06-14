@@ -3,6 +3,6 @@
 old_README.md
 **/.idea
 datasets
-*.log
-*.pt
+#*.log
+#*.pt
 *.zip

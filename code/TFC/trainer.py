@@ -23,16 +23,19 @@ def Trainer(model,  model_optimizer, classifier, classifier_optimizer, train_dl,
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(model_optimizer, 'min')
     if training_mode == 'pre_train':
         print('Pretraining on source dataset')
+        pretrain_loss = []
         for epoch in range(1, config.num_epoch + 1):
             # Train and validate
             """Train. In fine-tuning, this part is also trained???"""
             train_loss = model_pretrain(model, model_optimizer, criterion, train_dl, config, device, training_mode)
-            logger.debug(f'\nPre-training Epoch : {epoch}', f'Train Loss : {train_loss:.4f}')
+            pretrain_loss.append(train_loss.item())
+            logger.debug('\nPre-training Epoch : %d, Train Loss : %.4f', epoch, train_loss)
 
         os.makedirs(os.path.join(experiment_log_dir, "saved_models"), exist_ok=True)
         chkpoint = {'model_state_dict': model.state_dict()}
         torch.save(chkpoint, os.path.join(experiment_log_dir, "saved_models", f'ckp_last.pt'))
         print('Pretrained model is stored at folder:{}'.format(experiment_log_dir+'saved_models'+'ckp_last.pt'))
+        logger.debug("loss=%s",pretrain_loss)
 
     """Fine-tuning and Test"""
     if training_mode != 'pre_train':
@@ -41,13 +44,19 @@ def Trainer(model,  model_optimizer, classifier, classifier_optimizer, train_dl,
         performance_list = []
         total_f1 = []
         KNN_f1 = []
+        finetune_loss = []
+        finetune_acc = []
+        test_acc_list =[]
+        test_loss_list = []
         global emb_finetune, label_finetune, emb_test, label_test
 
         for epoch in range(1, config.num_epoch + 1):
             logger.debug(f'\nEpoch : {epoch}')
 
-            valid_loss, emb_finetune, label_finetune, F1 = model_finetune(model, model_optimizer, valid_dl, config,
+            valid_loss, valid_acc, emb_finetune, label_finetune, F1 = model_finetune(model, model_optimizer, valid_dl, config,
                                   device, training_mode, classifier=classifier, classifier_optimizer=classifier_optimizer)
+            finetune_loss.append(valid_loss.item())
+            finetune_acc.append(valid_acc.item())
             scheduler.step(valid_loss)
 
 
@@ -69,6 +78,8 @@ def Trainer(model,  model_optimizer, classifier, classifier_optimizer, train_dl,
             test_loss, test_acc, test_auc, test_prc, emb_test, label_test, performance = model_test(model, test_dl, config, device, training_mode,
                                                              classifier=classifier, classifier_optimizer=classifier_optimizer)
             performance_list.append(performance)
+            test_acc_list.append(test_acc.item())
+            test_loss_list.append(test_loss.item())
 
             """Use KNN as another classifier; it's an alternation of the MLP classifier in function model_test. 
             Experiments show KNN and MLP may work differently in different settings, so here we provide both. """
@@ -100,6 +111,13 @@ def Trainer(model,  model_optimizer, classifier, classifier_optimizer, train_dl,
               '| AUPRC=%.4f' % (best_performance[0], best_performance[1], best_performance[2], best_performance[3],
                                 best_performance[4], best_performance[5]))
         print('Best KNN F1', max(KNN_f1))
+
+        logger.debug("############################# SAVED VALUES FOR PLOTS #############################")
+        logger.debug("Finetune_Accuracies= %s", finetune_acc)
+        logger.debug("Finetune_Losses= %s", finetune_loss)
+        logger.debug("Test_Accuracies= %s", test_acc_list)
+        logger.debug("Test_Losses= %s", test_loss_list)
+        logger.debug("##################################################################################")
 
     logger.debug("\n################## Training is Done! #########################")
 
@@ -234,7 +252,7 @@ def model_finetune(model, model_optimizer, val_dl, config, device, training_mode
     print(' Finetune: loss = %.4f| Acc=%.4f | Precision = %.4f | Recall = %.4f | F1 = %.4f| AUROC=%.4f | AUPRC = %.4f'
           % (ave_loss, ave_acc*100, precision * 100, recall * 100, F1 * 100, ave_auc * 100, ave_prc *100))
 
-    return ave_loss, feas, trgs, F1
+    return ave_loss, ave_acc, feas, trgs, F1
 
 
 def model_test(model,  test_dl, config,  device, training_mode, classifier=None, classifier_optimizer=None):

@@ -44,11 +44,11 @@ def Trainer(model,  temporal_contr_model, model_optimizer, temp_cont_optimizer, 
             """Train. In fine-tuning, this part is also trained???"""
             train_loss, loss_t, loss_f, loss_c, loss_TF, train_acc, train_auc = model_pretrain(model, temporal_contr_model, model_optimizer, temp_cont_optimizer, criterion,
                                                               train_dl, config, device, training_mode, model_F=model_F, model_F_optimizer=model_F_optimizer)
-            loss_list.append(train_loss)
-            loss_t_list.append(loss_t)
-            loss_f_list.append(loss_f)
-            loss_c_list.append(loss_c)
-            loss_TF_list.append(loss_TF)
+            loss_list.append(train_loss.item())
+            loss_t_list.append(loss_t.item())
+            loss_f_list.append(loss_f.item())
+            loss_c_list.append(loss_c.item())
+            loss_TF_list.append(loss_TF.item())
 
             if training_mode != 'self_supervised':  # use scheduler in all other modes.
                 scheduler.step(train_loss)
@@ -179,6 +179,11 @@ def model_pretrain(model, temporal_contr_model, model_optimizer, temp_cont_optim
     print('preptraining: overall loss:{}, l_t: {}, l_f:{}, l_c:{}'.format(loss,loss_t,loss_f, loss_c))
 
     total_loss = torch.tensor(total_loss).mean()
+    total_loss_t = torch.tensor(total_loss_t).mean()
+    total_loss_f = torch.tensor(total_loss_f).mean()
+    total_loss_c = torch.tensor(total_loss_c).mean()
+    total_loss_TF = torch.tensor(total_loss_TF).mean()
+
     if training_mode == "pre_train":
         total_acc = 0
         total_auc = 0

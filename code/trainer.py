@@ -37,18 +37,20 @@ def Trainer(model,  temporal_contr_model, model_optimizer, temp_cont_optimizer, 
         loss_f_list = []
         loss_c_list = []
         loss_TF_list = []
+        loss_val_list = []
         
 
         for epoch in range(1, config.num_epoch + 1):
             # Train and validate
             """Train. In fine-tuning, this part is also trained???"""
-            train_loss, loss_t, loss_f, loss_c, loss_TF, train_acc, train_auc = model_pretrain(model, temporal_contr_model, model_optimizer, temp_cont_optimizer, criterion,
-                                                              train_dl, config, device, training_mode, model_F=model_F, model_F_optimizer=model_F_optimizer)
+            train_loss, loss_t, loss_f, loss_c, loss_TF, loss_val, train_acc, train_auc = model_pretrain(model, temporal_contr_model, model_optimizer, temp_cont_optimizer, criterion,
+                                                              train_dl, loss_dl, config, device, training_mode, model_F=model_F, model_F_optimizer=model_F_optimizer)
             loss_list.append(train_loss.item())
             loss_t_list.append(loss_t.item())
             loss_f_list.append(loss_f.item())
             loss_c_list.append(loss_c.item())
             loss_TF_list.append(loss_TF.item())
+            loss_val_list.append(loss_val.item())
 
             if training_mode != 'self_supervised':  # use scheduler in all other modes.
                 scheduler.step(train_loss)
@@ -129,7 +131,7 @@ def Trainer(model,  temporal_contr_model, model_optimizer, temp_cont_optimizer, 
 
 
 
-def model_pretrain(model, temporal_contr_model, model_optimizer, temp_cont_optimizer, criterion, train_loader, config,
+def model_pretrain(model, temporal_contr_model, model_optimizer, temp_cont_optimizer, criterion, train_loader, loss_loader, config,
                    device, training_mode, model_F=None, model_F_optimizer=None):
     total_loss = []
     total_loss_c = []
@@ -190,7 +192,34 @@ def model_pretrain(model, temporal_contr_model, model_optimizer, temp_cont_optim
     else:
         total_acc = torch.tensor(total_acc).mean()
         total_auc = torch.tensor(total_auc).mean()
-    return total_loss, total_loss_t, total_loss_f, total_loss_c, total_loss_TF, total_acc, total_auc
+
+        # Eval on validation set
+
+    model.eval()
+    loss_vals = []
+    val_count = 0
+    for batch_idx, (data_val, _ , aug1_val, data_f_val, aug1_f_val) in enumerate(loss_loader):
+        val_count += 1
+        data_val = data_val.float().to(device) # data: [128, 1, 178]
+        aug1_val = aug1_val.float().to(device)  # aug1 = aug2 : [128, 1, 178]
+        data_f_val, aug1_f_val = data_f_val.float().to(device), aug1_f_val.float().to(device)  # aug1 = aug2 : [128, 1, 178]
+
+        
+        h_t_val, z_t_val, h_f_val, z_f_val=model(data_val, data_f_val)
+        h_t_aug_val, z_t_aug_val, h_f_aug_val, z_f_aug_val=model(aug1_val, aug1_f_val)
+        loss_t_val = nt_xent_criterion(h_t_val, h_t_aug_val)
+        loss_f_val = nt_xent_criterion(h_f_val, h_f_aug_val)
+        l_TF_val = nt_xent_criterion(z_t_val, z_f_val)
+        l_1_val, l_2_val, l_3_val = nt_xent_criterion(z_t_val, z_f_aug_val), nt_xent_criterion(z_t_aug_val, z_f_val), nt_xent_criterion(z_t_aug_val, z_f_aug_val)
+        loss_c_val = (1+ l_TF_val -l_1_val) + (1+ l_TF_val -l_2_val) + (1+ l_TF_val -l_3_val)
+        loss_val = lam*(loss_t_val + loss_f_val) + (1-lam)*loss_c_val
+        loss_vals.append(loss_val)
+        if val_count == 20:
+            break
+    
+    total_loss_val = torch.tensor(loss_vals).mean()
+
+    return total_loss, total_loss_t, total_loss_f, total_loss_c, total_loss_TF, total_loss_val, total_acc, total_auc
 
 
 def model_finetune(model, temporal_contr_model, val_dl, config, device, training_mode, model_optimizer, model_F=None, model_F_optimizer=None,

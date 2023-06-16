@@ -68,6 +68,7 @@ def Trainer(model,  temporal_contr_model, model_optimizer, temp_cont_optimizer, 
         logger.debug('loss_f = %s', loss_f_list)
         logger.debug('loss_c = %s', loss_c_list)
         logger.debug('loss_TF = %s', loss_TF_list)
+        logger.debug('loss_val = %s', loss_val_list)
     
 
     """Fine-tuning and Test"""
@@ -125,6 +126,7 @@ def Trainer(model,  temporal_contr_model, model_optimizer, temp_cont_optimizer, 
         logger.debug('finetune_acc_list = %s', finetune_acc_list)
         logger.debug('test_acc_list = %s', test_acc_list)
         logger.debug('test_loss_list = %s', test_loss_list)
+
 
 
     logger.debug("\n################## Training is Done! #########################")
